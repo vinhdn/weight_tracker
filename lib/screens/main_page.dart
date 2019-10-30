@@ -44,7 +44,7 @@ class MainPageState extends State<MainPage>
   void initState() {
     super.initState();
     _scrollViewController = new ScrollController();
-    _tabController = new TabController(vsync: this, length: 2);
+    _tabController = new TabController(vsync: this, length: 1);
   }
 
   @override
@@ -97,32 +97,11 @@ class MainPageState extends State<MainPage>
                   pinned: true,
                   floating: true,
                   forceElevated: innerBoxIsScrolled,
-                  bottom: new TabBar(
-                    tabs: <Tab>[
-                      new Tab(
-                        key: new Key('StatisticsTab'),
-                        text: "STATISTICS",
-                        icon: new Icon(Icons.show_chart),
-                      ),
-                      new Tab(
-                        key: new Key('HistoryTab'),
-                        text: "HISTORY",
-                        icon: new Icon(Icons.history),
-                      ),
-                    ],
-                    controller: _tabController,
-                  ),
                   actions: _buildMenuActions(context),
                 ),
               ];
             },
-            body: new TabBarView(
-              children: <Widget>[
-                new StatisticsPage(),
-                new HistoryPage(),
-              ],
-              controller: _tabController,
-            ),
+            body: new StatisticsPage(),
           ),
           floatingActionButton: new FloatingActionButton(
             onPressed: () => viewModel.openAddEntryDialog(),
