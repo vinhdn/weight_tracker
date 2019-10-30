@@ -15,6 +15,8 @@ dependencies:
   shared_preferences: ^0.4.3
   mockito: ^4.0.0
   google_sign_in: ^3.2.4
+  http: ^0.12.0+2
+  image: ^2.1.6
 
 dev_dependencies:
   flutter_test:

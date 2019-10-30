@@ -13,6 +13,10 @@ import 'package:weight_tracker/model/weight_entry.dart';
 import 'package:weight_tracker/widgets/progress_chart_dropdown.dart';
 import 'package:weight_tracker/widgets/progress_chart_utils.dart' as utils;
 import 'package:weight_tracker/widgets/progress_chart_utils.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter/rendering.dart';
+import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as im;
 
 class ScheduleConfig {
     static const int padding = 7;
@@ -51,6 +55,11 @@ class ProgressChartState extends State<ProgressChart> {
 
     ProgressChartState() {
         _createData();
+        var now = DateTime.now();
+        var timeNow = now.hour * 60 * 2 + now.minute * 2.0;
+        if(left == 0 && timeNow > 60) {
+            left = timeNow - 60;
+        }
     }
 
     @override
@@ -212,7 +221,7 @@ class ProgressChartState extends State<ProgressChart> {
             List<Schedule> _schedules = List();
             while (currentWidth < maxWidth) {
                 double w = 15 * 2.0 + math.Random().nextInt(120 * 2); //Min 15m ,max 120m
-                if (currentWidth < maxWidth && currentWidth + w > maxWidth) {
+                if (currentWidth < maxWidth - ScheduleConfig.padding && currentWidth + w > maxWidth - ScheduleConfig.padding) {
                     w = maxWidth - currentWidth;
                 }
                 _schedules.add(Schedule(i * i + _schedules.length,
@@ -221,6 +230,40 @@ class ProgressChartState extends State<ProgressChart> {
             }
             _channels.add(Channel(i, "Channel ${i + 1}", _schedules));
         }
+        _renderImage(0);
+    }
+
+    _loadImage(String url, callback) async {
+        final bytes = await http.readBytes(url);
+        im.Image image = im.decodeImage(bytes);
+        double newWidth = image.width.toDouble();
+        double newHeight = image.height.toDouble();
+        if(newWidth > 100.0) {
+            newWidth = 100;
+            newHeight = image.height * newWidth / image.width;
+        }
+        if(newHeight > 50) {
+            newHeight = 50;
+            newWidth = image.width * newHeight / image.height;
+        }
+        var imageResized = im.copyResize(image, width: newWidth.toInt(), height: newHeight.toInt());
+        ui.decodeImageFromList(imageResized.getBytes(), callback);
+//        final frame = await bg.getNextFrame();
+//        callback(frame);
+    }
+
+    _renderImage(id) {
+        this._loadImage('https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/VTV6_logo_2013_final.svg/1200px-VTV6_logo_2013_final.svg.png', (image) {
+            for(Channel channel in _channels) {
+                channel.image = image;
+                setState(() {
+                    this._channels = _channels;
+                });
+//                if(channel.id == id) {
+//                    break;
+//                }
+            }
+        });
     }
 }
 
@@ -229,11 +272,11 @@ class ChartPainter extends CustomPainter {
     final int numberOfDays;
     final bool isLbs;
     final List<Channel> channels;
-    final double left;
+    double left;
     final double top;
     final Offset touchDown;
     final int padding = ScheduleConfig.padding;
-
+    double _now = 0;
     final Function(Schedule) _scheduleClickListener;
 
     ChartPainter(
@@ -244,7 +287,10 @@ class ChartPainter extends CustomPainter {
         this.numberOfDays,
         this.isLbs,
         this.touchDown,
-        this._scheduleClickListener);
+        this._scheduleClickListener) {
+        var now = DateTime.now();
+       _now = now.hour * 60 * 2 + now.minute * 2.0;
+    }
 
     double leftOffsetStart;
     double topOffsetEnd;
@@ -263,9 +309,9 @@ class ChartPainter extends CustomPainter {
         drawingHeight = topOffsetEnd;
 
         _drawSchedules(canvas, size);
-        _drawCurrentTimeLine(canvas, 12 * 60 * 2 + 34.0, size);
         _drawChannelsTitle(canvas, size);
         _drawTimes(canvas, size);
+        _drawCurrentTimeLine(canvas, _now, size);
     }
 
     @override
@@ -282,6 +328,7 @@ class ChartPainter extends CustomPainter {
                 double rWidth = schedule.end - schedule.start - padding;
                 double rLeft = schedule.start + padding - left + channelWidth;
                 double rTop = i * height + i * padding - top + headerHeight;
+                print(rWidth.toString() + " | " + rLeft.toString() + " | " + rTop.toString() + " | ");
                 if (schedule.start - left + channelWidth > size.width) continue;
                 if (schedule.end - left + channelWidth < 0) continue;
                 if (rTop > size.height) continue;
@@ -321,7 +368,6 @@ class ChartPainter extends CustomPainter {
                 path.addRRect(rRect);
                 canvas.drawShadow(path, Colors.black87 , 2, true);
                 canvas.drawRRect(rRect, paint);
-//                canvas.drawPath(path, paint);
                 tp.paint(
                     canvas,
                     new Offset(schedule.start + (padding + 5) - left + channelWidth,
@@ -340,6 +386,8 @@ class ChartPainter extends CustomPainter {
         double height = 50.0;
         for(Channel channel in channels) {
             double rTop = i * height + i * padding - top + headerHeight;
+            if (rTop > size.height) {i++;continue;}
+            if (rTop < 0) {i++;continue;}
             ui.Rect rect = new ui.Rect.fromLTWH(
                 0,
                 rTop,
@@ -362,10 +410,17 @@ class ChartPainter extends CustomPainter {
                 text: span,
                 textAlign: TextAlign.start);
             tp.layout(maxWidth: channelWidth - 5 * 2);
-            tp.paint(
-                canvas,
-                new Offset(5,
-                    rTop + height / 4.0));
+//            tp.paint(
+//                canvas,
+//                new Offset(5,
+//                    rTop + height / 4.0));
+            if(channel.image != null) {
+                int iWidth = channel.image.width;
+                int iHeight = channel.image.height;
+                int lOffset = (channelWidth.toInt() - iWidth - 3) >> 1;
+                int tOffset = (height.toInt() - iHeight) >> 1;
+                canvas.drawImage(channel.image, Offset(lOffset.toDouble(), rTop + tOffset), paint);
+            }
             i++;
         }
     }
@@ -409,6 +464,7 @@ class ChartPainter extends CustomPainter {
             currentDrawTime += 30 * 2;
         }
     }
+
     ///draws actual chart
     void _drawLines(
         ui.Canvas canvas, int minLineValue, int maxLineValue, bool isLbs) {
@@ -605,6 +661,6 @@ class Channel {
     int id;
     String name;
     List<Schedule> schedules;
-
+    ui.Image image;
     Channel(this.id, this.name, this.schedules);
 }
