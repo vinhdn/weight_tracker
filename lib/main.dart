@@ -38,7 +38,7 @@ class MyApp extends StatelessWidget {
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],
-        home: new MainPage(title: "Weight Tracker", analytics: analytics),
+        home: new MainPage(title: "Weight Tracker"),
       ),
     );
   }

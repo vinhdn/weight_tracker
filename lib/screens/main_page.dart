@@ -1,12 +1,10 @@
-import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_redux/flutter_redux.dart';
-import 'package:weight_tracker/logic/actions.dart';
-import 'package:weight_tracker/logic/redux_state.dart';
-import 'package:weight_tracker/screens/history_page.dart';
-import 'package:weight_tracker/screens/settings_screen.dart';
-import 'package:weight_tracker/screens/statistics_page.dart';
-import 'package:weight_tracker/screens/weight_entry_dialog.dart';
+import 'package:flutter/rendering.dart';
+import 'package:weight_tracker/logic/constants.dart';
+import 'package:weight_tracker/widgets/general.dart' as general;
+import 'package:weight_tracker/widgets/channel_schedule.dart';
+import 'package:weight_tracker/logic/constants.dart' as cons;
 
 class MainPageViewModel {
   final double defaultWeight;
@@ -25,8 +23,7 @@ class MainPageViewModel {
 }
 
 class MainPage extends StatefulWidget {
-  MainPage({Key key, this.title, this.analytics}) : super(key: key);
-  final FirebaseAnalytics analytics;
+  MainPage({Key key, this.title}) : super(key: key);
   final String title;
 
   @override
@@ -37,103 +34,147 @@ class MainPage extends StatefulWidget {
 
 class MainPageState extends State<MainPage>
     with SingleTickerProviderStateMixin {
-  ScrollController _scrollViewController;
+//  ScrollController _scrollViewController;
   TabController _tabController;
+  double _top = 0;
+  TopUpdateListener _topUpdateListener;
+
+  Widget appBarTitle = new Text("Search Sample", style: new TextStyle(color: Colors.white),);
+  Icon actionIcon = new Icon(Icons.search, color: Colors.white,);
 
   @override
   void initState() {
     super.initState();
-    _scrollViewController = new ScrollController();
+//    _scrollViewController = new ScrollController();
     _tabController = new TabController(vsync: this, length: 1);
+    _topUpdateListener = (top) {
+      _top = top;
+//      _scrollViewController.jumpTo(_top);
+    };
+//    _scrollViewController.addListener(listener)
   }
 
   @override
   void dispose() {
-    _scrollViewController.dispose();
+//    _scrollViewController.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return new StoreConnector<ReduxState, MainPageViewModel>(
-      converter: (store) {
-        return new MainPageViewModel(
-          defaultWeight: store.state.entries.isEmpty
-              ? 60.0
-              : store.state.entries.first.weight,
-          hasEntryBeenAdded: store.state.mainPageState.hasEntryBeenAdded,
-          acceptEntryAddedCallback: () =>
-              store.dispatch(new AcceptEntryAddedAction()),
-          openAddEntryDialog: () {
-            store.dispatch(new OpenAddEntryDialog());
-            Navigator.of(context).push(new MaterialPageRoute(
-              builder: (BuildContext context) {
-                return new WeightEntryDialog();
-              },
-              fullscreenDialog: true,
-            ));
-            widget.analytics.logEvent(name: 'open_add_dialog');
-          },
-          unit: store.state.unit,
-        );
-      },
-      onInit: (store) {
-        store.dispatch(new GetSavedWeightNote());
-      },
-      builder: (context, viewModel) {
-        if (viewModel.hasEntryBeenAdded) {
-          _scrollToTop();
-          viewModel.acceptEntryAddedCallback();
-        }
-        return new Scaffold(
-          body: new NestedScrollView(
-            controller: _scrollViewController,
-            headerSliverBuilder:
-                (BuildContext context, bool innerBoxIsScrolled) {
-              return <Widget>[
-                new SliverAppBar(
-                  title: new Text(widget.title),
-                  pinned: true,
-                  floating: true,
-                  forceElevated: innerBoxIsScrolled,
-                  actions: _buildMenuActions(context),
-                ),
-              ];
-            },
-            body: new StatisticsPage(),
-          ),
-          floatingActionButton: new FloatingActionButton(
-            onPressed: () => viewModel.openAddEntryDialog(),
-            tooltip: 'Add new weight entry',
-            child: new Icon(Icons.add),
-          ),
-        );
-      },
+    return Scaffold(
+      appBar: buildBar(context),
+      body: ConstrainedBox(
+        constraints: BoxConstraints.expand(),
+        child:  new Stack(
+          children: <Widget>[
+            new Positioned.fill(
+              left: 0.0,
+              right: 0.0,
+              child: new ChannelScheduleWidget(_topUpdateListener),
+            ),
+//            GestureDetector(
+//          behavior: HitTestBehavior.translucent,
+//            child:
+//            Container(
+//              width: CHANNEL_WIDTH.toDouble(),
+//              margin: EdgeInsets.only(top: cons.TIME_HEADER_HEIGHT),
+//              color: cons.ColorList.colorBg,
+//                  child: ListView.builder(
+//                itemBuilder: (context, index) {
+//                  return new Container(
+//                    width: CHANNEL_WIDTH.toDouble(),
+//                    height: CHANNEL_SCHEDULE_HEIGHT.toDouble(),
+//                    margin: const EdgeInsets.only(bottom: 7, right: 0, left: 10),
+//                    decoration: BoxDecoration(
+//                      color: general.hexToColor('#C3C4C5'),
+//                      borderRadius: general.borderLeft(radius: 2.0),
+//                      boxShadow: general.boxShadow,
+//                    ),
+//                    child: Image.network(
+//                      'https://upload.wikimedia.org/wikipedia/commons/f/fc/Logo_VTV1_HD.png',
+//                      width: CHANNEL_WIDTH.toDouble(),
+//                      height: CHANNEL_SCHEDULE_HEIGHT.toDouble(),
+//                    ),
+//                  );
+//                },
+//                itemCount: 20,
+//                shrinkWrap: false,
+//                controller: _scrollViewController,
+//              )),)
+          ],
+        ),
+      ),
     );
   }
 
-  List<Widget> _buildMenuActions(BuildContext context) {
-    return [
-      IconButton(
-          icon: new Icon(Icons.settings),
-          onPressed: () => _openSettingsPage(context)),
-    ];
-  }
+  Widget buildBar(BuildContext context) {
+    return new AppBar(
+        centerTitle: true,
+        title: appBarTitle,
+        actions: <Widget>[
+          new IconButton(icon: actionIcon, onPressed: () {
+            setState(() {
+              if (this.actionIcon.icon == Icons.search) {
+                this.actionIcon = new Icon(Icons.close, color: Colors.white,);
+                this.appBarTitle = new TextField(
+//                  controller: _searchQuery,
+                  style: new TextStyle(
+                    color: Colors.white,
 
-  _scrollToTop() {
-    _scrollViewController.animateTo(
-      0.0,
-      duration: const Duration(microseconds: 1),
-      curve: new ElasticInCurve(0.01),
+                  ),
+                  decoration: new InputDecoration(
+                      prefixIcon: new Icon(Icons.search, color: Colors.white),
+                      hintText: "Search...",
+                      hintStyle: new TextStyle(color: Colors.white)
+                  ),
+                );
+                _handleSearchStart();
+              }
+              else {
+                _handleSearchEnd();
+              }
+            });
+          },),
+        ]
     );
   }
 
-  _openSettingsPage(BuildContext context) async {
-    Navigator.of(context).push(new MaterialPageRoute(
-      builder: (BuildContext context) {
-        return new SettingsPage();
-      },
-    ));
+  bool _IsSearching;
+  String _searchText = "";
+
+  void _handleSearchStart() {
+    setState(() {
+      _IsSearching = true;
+    });
   }
+
+  void _handleSearchEnd() {
+    setState(() {
+      this.actionIcon = new Icon(Icons.search, color: Colors.white,);
+      this.appBarTitle =
+      new Text("Search Sample", style: new TextStyle(color: Colors.white),);
+      _IsSearching = false;
+//      _searchQuery.clear();
+    });
+  }
+
+//  _scrollToTop() {
+//    _scrollViewController.animateTo(
+//      0.0,
+//      duration: const Duration(microseconds: 1),
+//      curve: new ElasticInCurve(0.01),
+//    );
+//  }
+}
+
+class ChildItem extends StatelessWidget {
+  final String name;
+  ChildItem(this.name);
+  @override
+  Widget build(BuildContext context) {
+    return new ListTile(title: new Text(this.name));
+  }
+
 }
