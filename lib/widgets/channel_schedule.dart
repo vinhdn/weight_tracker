@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/material.dart' as prefix0;
 import 'package:flutter/material.dart' as sky;
 import 'package:flutter/painting.dart' as sky;
 import 'package:flutter/rendering.dart' as sky;
@@ -13,17 +11,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' as sky;
 import 'package:flutter/widgets.dart' as sky;
 import 'package:flutter/widgets.dart';
-import 'package:flutter_redux/flutter_redux.dart';
-import 'package:http/http.dart' as http;
-import 'package:image/image.dart' as im;
-import 'package:intl/intl.dart';
-import 'package:tuple/tuple.dart';
-import 'package:weight_tracker/logic/actions.dart';
 import 'package:weight_tracker/logic/constants.dart';
-import 'package:weight_tracker/logic/redux_state.dart';
-import 'package:weight_tracker/model/weight_entry.dart';
 import 'package:weight_tracker/widgets/general.dart';
-import 'package:weight_tracker/widgets/progress_chart_utils.dart' as utils;
 import 'package:weight_tracker/widgets/progress_chart_utils.dart';
 
 class ScheduleConfig {
@@ -44,7 +33,7 @@ class ChannelScheduleWidget extends StatefulWidget {
     }
 }
 
-class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
+class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> with SingleTickerProviderStateMixin {
     DateTime startDate;
     DateTime snapShotStartDate;
     double startTouch;
@@ -57,6 +46,8 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
     double maxHeightDraw = 0.0;
     Offset touchDown;
     final TopUpdateListener _topUpdateListener;
+    AnimationController _animationController;
+    Animation<double> animation;
 
     Schedule _touchSchedule;
     bool _isVerticalDrag = true;
@@ -68,6 +59,7 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
         if (left == 0 && timeNow > 30 * ONE_MINUTE_TO_DRAW) {
             left = timeNow - 30 * ONE_MINUTE_TO_DRAW;
         }
+        _animationController = AnimationController(duration: Duration(milliseconds: 1000), vsync: this);
     }
 
     @override
@@ -75,9 +67,11 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
         return _buildChart();
     }
 
+    double panInitial = 0.0;
+    double panTopInitial = 0.0;
+
     Widget _buildChart() {
         return GestureDetector(
-            behavior: HitTestBehavior.translucent,
             onHorizontalDragStart: (DragStartDetails start) =>
                 _onDragStart(context, start, false),
             onHorizontalDragUpdate: (DragUpdateDetails update) =>
@@ -87,11 +81,12 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
             onVerticalDragStart: (DragStartDetails start) => {
                 _onDragStart(context, start, true),
             },
-            onTapDown: (tab) => {
+            onTapDown: (tab) {
+                _animationController?.stop(canceled: true);
                 setState(() {
                     _touchSchedule = null;
                     touchDown = tab.localPosition;
-                })
+                });
             },
             onTapUp: (tab) {
                 if (touchDown != null && _touchSchedule != null) {
@@ -125,6 +120,21 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
                     _touchSchedule = null;
                 });
             },
+            onHorizontalDragCancel: () {
+            },
+            onVerticalDragCancel: () {
+
+            },
+            onHorizontalDragEnd: (detail) {
+                if(detail.velocity.pixelsPerSecond.dy != 0 && !_isVerticalDrag) {
+                    _startScrollAnimation(detail.velocity.pixelsPerSecond.dy, false);
+                }
+            },
+            onVerticalDragEnd: (detail) {
+                if(detail.velocity.pixelsPerSecond.dx != 0 && _isVerticalDrag) {
+                    _startScrollAnimation(detail.velocity.pixelsPerSecond.dx, true);
+                }
+            },
             child: CustomPaint(
                 key: _containerKey,
                 painter: ChartPainter(
@@ -139,8 +149,58 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
         );
     }
 
+    _startScrollAnimation(velocity, bool _isVertical) {
+        print("Start scoll Animation $_newScrollLeft  $_newScrollTop $velocity");
+
+        lastLeft = left;
+        lastTop = top;
+        _animationController.stop(canceled: true);
+        _animationController.duration = Duration(milliseconds:500);
+        _animationController.value = 0.0;
+//        _animationController.fling(velocity: 1);
+        if(animation != null) {
+            animation.removeListener(_animationListener);
+        }
+        _animationListener = () {
+            print("Anination value: ${animation.value} isVertical $_isVertical");
+            setState(() {
+                if(!_isVerticalDrag) {
+                    var newLeft = (_newScrollLeft > 0 ? 1 : -1) * animation.value;
+                    if(lastLeft + newLeft <= 0) {
+                        left = 0;
+                    } else if(lastLeft + newLeft > maxWidthDraw - _getWidgetSize().width) {
+                        left = maxWidthDraw - _getWidgetSize().width;
+                    } else {
+                        left = lastLeft + newLeft;
+                    }
+                } else {
+                    var newTop = (_newScrollTop > 0 ? 1 : -1) * animation.value;
+                    if (lastTop + newTop > 0) {
+                        if(lastTop + newTop > maxHeightDraw - _getWidgetSize().height) {
+                            top = maxHeightDraw - _getWidgetSize().height;
+                        } else {
+                            top = lastTop + newTop;
+                        }
+                    } else {
+                        top = 0;
+                    }
+                }
+            });
+        };
+        final double _end = (!_isVertical) ?_newScrollLeft + 0.0 :
+            _newScrollTop + 0.0;
+        animation =  Tween<double>(begin: 0, end: _end.abs() * 10).animate(_animationController)
+                ..addListener(_animationListener);
+        _animationController.forward();
+    }
+
+    VoidCallback _animationListener = () {
+
+    };
+
     _onDragStart(
         BuildContext context, DragStartDetails start, bool isVerticalDrag) {
+        _animationController?.stop(canceled: true);
         _isVerticalDrag = isVerticalDrag;
         print(start.globalPosition.toString());
         RenderBox getBox = context.findRenderObject();
@@ -148,10 +208,17 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
         setState(() {
             lastLeft = left;
             startTouch = local.dx;
+            _prvX = local.dx;
             lastTop = top;
             _startTouchTop = local.dy;
+            _prvY = local.dy;
         });
     }
+
+    double _newScrollLeft = 0.0;
+    double _newScrollTop = 0.0;
+    double _prvX = 0.0;
+    double _prvY = 0.0;
 
     _onDragUpdate(
         BuildContext context, DragUpdateDetails update, bool isVerticalDrag) {
@@ -164,6 +231,9 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
             touchDown = null;
             _touchSchedule = null;
             if (!_isVerticalDrag) {
+                _newScrollTop = 0;
+                _newScrollLeft = _prvX - local.dx;
+                _prvX = local.dx;
                 if (lastLeft + newLeft > 0) {
                     if(lastLeft + newLeft > maxWidthDraw - _getWidgetSize().width) {
                         left = maxWidthDraw - _getWidgetSize().width;
@@ -174,6 +244,9 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
                     left = 0;
                 }
             } else {
+                _newScrollLeft = 0;
+                _newScrollTop = _prvY - local.dy;
+                _prvY = local.dy;
                 if (lastTop + newTop > 0) {
                     if(lastTop + newTop > maxHeightDraw - _getWidgetSize().height) {
                         top = maxHeightDraw - _getWidgetSize().height;
@@ -265,28 +338,30 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
     _renderImage() async {
         final recorder = new ui.PictureRecorder();
         final image = await this._loadImage('https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/VTV6_logo_2013_final.svg/1200px-VTV6_logo_2013_final.svg.png');
+        double maxWidth = CHANNEL_WIDTH - 10;
+        double maxHeight = CHANNEL_SCHEDULE_HEIGHT - 5;
         final canvas = new Canvas(
             recorder,
             Rect.fromPoints(
                 Offset(0.0, 0.0),
-                Offset(100, 50)
+                Offset(CHANNEL_WIDTH, CHANNEL_SCHEDULE_HEIGHT)
             )
         );
 
         double newWidth = image.width.toDouble();
         double newHeight = image.height.toDouble();
-        if(newWidth > 100.0) {
-            newWidth = 100;
+        if(newWidth > maxWidth) {
+            newWidth = maxWidth;
             newHeight = image.height * newWidth / image.width;
         }
-        if(newHeight > 50) {
-            newHeight = 50;
+        if(newHeight > maxHeight) {
+            newHeight = maxHeight;
             newWidth = image.width * newHeight / image.height;
         }
 //        canvas.drawImage(img, Offset.zero, Paint());
         canvas.drawImageRect(image, Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()), Rect.fromLTWH(0, 0, newWidth, newHeight), Paint()..filterQuality = FilterQuality.high);
         final picture = recorder.endRecording();
-        final png = await picture.toImage(100, 50);
+        final png = await picture.toImage(maxWidth.toInt(), maxHeight.toInt());
         for(Channel channel in _channels) {
                 channel.image = png;
                 setState(() {
@@ -315,6 +390,14 @@ class ChannelScheduleWidgetState extends State<ChannelScheduleWidget> {
         super.initState();
         WidgetsBinding.instance.addPostFrameCallback(_onBuildCompleted);
     }
+
+    @override
+  void dispose() {
+    super.dispose();
+    if(_animationController != null) {
+        _animationController.dispose();
+    }
+  }
 }
 
 class ChartPainter extends CustomPainter {
@@ -403,7 +486,7 @@ class ChartPainter extends CustomPainter {
                 TextPainter tp = new TextPainter(
                     maxLines: 1,
                     ellipsis: "..",
-                    textDirection: prefix0.TextDirection.ltr,
+                    textDirection: TextDirection.ltr,
                     text: span,
                     textAlign: TextAlign.start);
                 tp.layout(maxWidth: rWidth - 3 - marginLeft);
@@ -445,7 +528,7 @@ class ChartPainter extends CustomPainter {
             if(channel.image != null) {
                 int iWidth = channel.image.width;
                 int iHeight = channel.image.height;
-                int lOffset = (channelWidth.toInt() - iWidth - 3) >> 1;
+                int lOffset = 5 + (channelWidth.toInt() - iWidth) >> 1;
                 int tOffset = (height.toInt() - iHeight) >> 1;
                 canvas.drawImage(channel.image, Offset(lOffset.toDouble(), rTop + tOffset), Paint()..filterQuality = FilterQuality.high);
             }
@@ -489,7 +572,7 @@ class ChartPainter extends CustomPainter {
             TextPainter tp = new TextPainter(
                 maxLines: 1,
                 ellipsis: "..",
-                textDirection: prefix0.TextDirection.ltr,
+                textDirection: TextDirection.ltr,
                 text: span,
                 textAlign: TextAlign.center);
             tp.layout(maxWidth: channelWidth);
