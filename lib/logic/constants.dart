@@ -10,7 +10,7 @@ const double CHANNEL_SCHEDULE_HEIGHT = 60;
 const double CHANNEL_WIDTH = 100;
 
 class ColorList {
-    static final Color colorBlue = Color(0x4678EE);
-    static final Color colorBg = hexToColor('#F1F3F5');
+    static final Color colorBlue = Color(0xFF4678EE);
+    static final Color colorBg = Color(0xFFF1F3F5);
 }
 
